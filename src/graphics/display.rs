@@ -13,13 +13,13 @@ use crate::graphics::grid::{Grid};
 pub struct Display {
     event_loop: EventLoop<()>,
     input_helper: WinitInputHelper,
-    
+
 }
 
-pub fn open( grid_lock : Arc<Mutex<Grid>>, display_width: u32, display_height: u32) -> Result<(), Error> {
+pub fn open( grid_lock : Arc<Mutex<Grid>>, display_width: usize, display_height: usize) -> Result<(), Error> {
     env_logger::init();
-    
-    
+
+
     let event_loop = EventLoop::new().unwrap();
     let mut input = WinitInputHelper::new();
     let window = {
@@ -32,12 +32,10 @@ pub fn open( grid_lock : Arc<Mutex<Grid>>, display_width: u32, display_height: u
             .unwrap()
     };
 
-    
-
     let mut pixels = {
         let window_size = window.inner_size();
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-        Pixels::new(display_width, display_height, surface_texture)?
+        Pixels::new(display_width as u32, display_height as u32, surface_texture)?
     };
 
     let res = event_loop.run(|event, elwt| {
@@ -47,7 +45,10 @@ pub fn open( grid_lock : Arc<Mutex<Grid>>, display_width: u32, display_height: u
             ..
         } = event
         {
-            grid_lock.lock().unwrap().draw(pixels.frame_mut());
+            {
+                let grid = grid_lock.lock().unwrap();
+                pixels.frame_mut().copy_from_slice(&grid.display[..])
+            }
             if let Err(err) = pixels.render() {
                 log_error("pixels.render", err);
                 elwt.exit();
@@ -57,7 +58,7 @@ pub fn open( grid_lock : Arc<Mutex<Grid>>, display_width: u32, display_height: u
 
         // Handle input events
         if input.update(&event) {
-            
+
             if input.key_pressed(KeyCode::KeyA) {
                 println!("Key A pressed");
             } else if input.key_held(KeyCode::KeyA) {
@@ -65,7 +66,7 @@ pub fn open( grid_lock : Arc<Mutex<Grid>>, display_width: u32, display_height: u
             } else if input.key_released(KeyCode::KeyA) {
                 println!("Key A Released");
             }
-            
+
             // Close events
             if input.key_pressed(KeyCode::Escape) || input.close_requested() {
                 elwt.exit();

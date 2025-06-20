@@ -56,9 +56,10 @@ impl<'a, 'b> Cpu<'a, 'b> {
             (0,0,0xE,0) => {
                 let grid = &mut self.grid_lock.lock().unwrap();
                 if instruction == 0x00E0 {
-                    for x in 0..(GRID_X_BOXES) as usize {
-                        for y in 0..(GRID_Y_BOXES) as usize {
+                    for x in 0..GRID_X_BOXES {
+                        for y in 0..GRID_Y_BOXES {
                             grid.data[x][y] = 0;
+                            grid.render_box(x, y, 0)
                         }
                     }
                     println!("Screen Cleared");
@@ -167,20 +168,26 @@ impl<'a, 'b> Cpu<'a, 'b> {
                 let vx = self.registers.registers[nib2 as usize];
                 let vy = self.registers.registers[nib3 as usize];
                 let n = nib4;
-                let grid = &mut self.grid_lock.lock().unwrap().data;
+                
                 let mut collision = 0;
 
-                for row in 0..n {
-                    let sprite_byte = self.memory.get(self.registers.index + row);
-                    for bit in 0..8{
-                        if (sprite_byte & (0b1000_0000 >> bit)) != 0 {
-                            // Sprites should wrap around screen, so apply modulo
-                            let x = ((vx + bit)  % GRID_X_BOXES as u8) as usize;
-                            let y = ((vy + row as u8) % GRID_Y_BOXES as u8) as usize;
-                            
-                            // Check if we're about to flip the pixel and set
-                            collision |= grid[x][y];
-                            grid[x][y] ^= 1;
+                {
+                    let grid = &mut self.grid_lock.lock().unwrap();
+                    for row in 0..n {
+                        let sprite_byte = self.memory.get(self.registers.index + row);
+                        for bit in 0..8 {
+                            if (sprite_byte & (0b1000_0000 >> bit)) != 0 {
+                                // Sprites should wrap around screen, so apply modulo
+                                let x = ((vx + bit) % GRID_X_BOXES as u8) as usize;
+                                let y = ((vy + row as u8) % GRID_Y_BOXES as u8) as usize;
+
+                                // Check if we're about to flip the pixel and set
+                                collision |= grid.data[x][y];
+                                let value = grid.data[x][y] ^ 1;
+                                grid.data[x][y] = value;
+                                
+                                grid.render_box(x, y, value);
+                            }
                         }
                     }
                 }
