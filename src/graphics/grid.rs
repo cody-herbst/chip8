@@ -38,20 +38,8 @@ impl Grid {
             display_height,
         }
     }
-
-    /// Draw the `World` state to the frame buffer.
-    ///
-    /// Assumes the default texture format: `wgpu::TextureFormat::Rgba8UnormSrgb`
-    pub(crate) fn draw(&self, frame: &mut [u8]) {
-        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            
-            pixel.copy_from_slice(&self.display[i*4..i*4 + 4]);
-        }
-    }
     
-    pub fn render_box(&mut self, x: usize, y : usize, v : u8) {
-        // x = 1, y = 0
-        // [16..32], 
+    pub fn draw_box(&mut self, x: usize, y : usize, v : u8) {
         
         // our starting index
         let mut i: usize = (x * BOX_WIDTH_X * 4) + (y * BOX_HEIGHT_Y * GRID_X_BOXES * BOX_WIDTH_X * 4);
@@ -68,16 +56,5 @@ impl Grid {
             }
             i += self.display_width * 4; // this should move us to the next pixel row
         }
-        
-        // for (i, pixel) in self.display.chunks_exact_mut(4).enumerate() { 
-        //     if (((i as u32 % self.display_width) as i16) / (BOX_WIDTH_X as i16)) as u8 == (x as u8) && 
-        //         (((i as u32 / self.display_height) as i16) / (BOX_HEIGHT_Y as i16)) as u8 == (y as u8) {
-        //         if v == 1 {
-        //             pixel.copy_from_slice(WHITE.as_slice());
-        //         } else {
-        //             pixel.copy_from_slice(BLACK.as_slice());
-        //         }
-        //     };
-        // }
     }
 }

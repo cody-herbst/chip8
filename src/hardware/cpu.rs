@@ -59,7 +59,7 @@ impl<'a, 'b> Cpu<'a, 'b> {
                     for x in 0..GRID_X_BOXES {
                         for y in 0..GRID_Y_BOXES {
                             grid.data[x][y] = 0;
-                            grid.render_box(x, y, 0)
+                            grid.draw_box(x, y, 0)
                         }
                     }
                     println!("Screen Cleared");
@@ -186,7 +186,7 @@ impl<'a, 'b> Cpu<'a, 'b> {
                                 let value = grid.data[x][y] ^ 1;
                                 grid.data[x][y] = value;
                                 
-                                grid.render_box(x, y, value);
+                                grid.draw_box(x, y, value);
                             }
                         }
                     }
