@@ -11,6 +11,10 @@ pub struct Args {
     /// Chip8 binary
     #[arg(short, long)]
     rom: String,
+
+    /// Emulation loop delay in milliseconds
+    #[arg(short, long, default_value_t = 3)]
+    delay: u64,
 }
 
 
@@ -18,4 +22,3 @@ fn main() {
     let args = Args::parse();
     run(args);
 }
-

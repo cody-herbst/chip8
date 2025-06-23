@@ -1,19 +1,18 @@
-use std::fmt::Debug;
+
 use std::sync::{Arc, Mutex, RwLock};
-use crossbeam_channel::Sender;
+
 use error_iter::ErrorIter;
 use log::error;
 use pixels::{Error, Pixels, SurfaceTexture};
-use winit::dpi::{LogicalSize, PhysicalSize};
-use winit::event::{Event, KeyEvent, WindowEvent};
+use winit::dpi::{LogicalSize};
+use winit::event::{Event, WindowEvent};
 use winit::event_loop::EventLoop;
 use winit::keyboard::KeyCode;
 use winit::keyboard::KeyCode::*;
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
 use crate::graphics::grid::{Grid};
-use crate::system::emulator::{KeyBoardEvent, Keys};
-use crate::system::emulator::KeyBoardEvent::{Held, Pressed, Released};
+use crate::system::emulator::{ Keys};
 
 const KEYS : [KeyCode; 16] = [
     Digit1,

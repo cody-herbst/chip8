@@ -1,5 +1,3 @@
-use crate::graphics::display;
-
 pub const GRID_X_BOXES: usize = 64;
 pub const GRID_Y_BOXES: usize = 32;
 
@@ -45,7 +43,7 @@ impl Grid {
         let mut i: usize = (x * BOX_WIDTH_X * 4) + (y * BOX_HEIGHT_Y * GRID_X_BOXES * BOX_WIDTH_X * 4);
         let upper_limit = BOX_WIDTH_X * 4;
         
-        for row in 0..16 {
+        for _ in 0..16 {
             let upper_bound = upper_limit + i;
             for pixel in self.display[i..upper_bound].chunks_exact_mut(4) {
                 if v == 1 {

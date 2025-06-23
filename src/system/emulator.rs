@@ -1,11 +1,8 @@
 use std::default::Default;
 use std::{thread, time};
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::sync::{Arc, Mutex, RwLock};
-use std::thread::Thread;
-use winit::keyboard::KeyCode;
 use crate::graphics::display::{open};
 use crate::hardware::cpu::Cpu;
 use crate::hardware::memory::Memory;
@@ -23,25 +20,18 @@ pub struct Registers {
 
 pub type Keys = [bool; 16];
 
-#[derive(Debug)]
-pub enum KeyBoardEvent {
-    Pressed(KeyCode),
-    Released(KeyCode),
-    Held(KeyCode),
-}
-
 pub fn run(args: Args) {
 
     let local_grid = Grid::new();
-    
+
     // had to do this because calling lock out side of the thread blocked the mutex
     let display_height = local_grid.display_height;
     let display_width = local_grid.display_width;
-    
+
     let grid = Arc::new(Mutex::new(local_grid));
     let cpu_grid = grid.clone();
     let display_grid = grid.clone();
-    
+
     let keys = Arc::new(RwLock::new(Keys::default()));
     let display_keys = keys.clone();
 
@@ -57,7 +47,7 @@ pub fn run(args: Args) {
         cpu.load_rom(&buffer);
 
         loop {
-            let millis = time::Duration::from_millis(1);
+            let millis = time::Duration::from_millis(args.delay);
             thread::sleep(millis);
             let instruction = cpu.fetch();
             cpu.execute(instruction);

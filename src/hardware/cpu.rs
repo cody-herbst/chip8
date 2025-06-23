@@ -1,14 +1,8 @@
-use std::ptr::eq;
-use std::rc::Rc;
-use std::sync::{mpsc, Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
-use crossbeam_channel::{Receiver, TryRecvError};
-use winit::keyboard::KeyCode::KeyA;
-use winit::keyboard::NamedKey::Key11;
 use crate::graphics::grid::{Grid, GRID_X_BOXES, GRID_Y_BOXES};
 use crate::hardware::memory::Memory;
-use crate::system;
-use crate::system::emulator::{KeyBoardEvent, Keys, Registers};
+use crate::system::emulator::{Keys, Registers};
 
 /// In the future this probably isn't necessary
 /// just checking out how lifetimes work.
@@ -66,18 +60,12 @@ impl<'a, 'b> Cpu<'a, 'b> {
         }
     }
     
-    fn decode_instruction(&mut self, instruction_data: u16) -> u8 {
-        (instruction_data >> 12) as u8
-    }
-    
     pub fn execute(&mut self, instruction: u16) {
         let nib1 = (instruction & 0xF000) >> 12;
         let nib2 = (instruction & 0x0F00) >> 8;
         let nib3 = (instruction & 0x00F0) >> 4;
         let nib4 = instruction & 0x000F;
-            
         
-        let op = self.decode_instruction(instruction);
         match (nib1, nib2, nib3, nib4) {
             (0,0,0,0) => (),
             (0,0,0xE,0) => {
