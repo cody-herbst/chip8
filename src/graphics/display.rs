@@ -1,22 +1,40 @@
-use std::sync::{Arc, Mutex};
+use std::fmt::Debug;
+use std::sync::{Arc, Mutex, RwLock};
+use crossbeam_channel::Sender;
 use error_iter::ErrorIter;
 use log::error;
 use pixels::{Error, Pixels, SurfaceTexture};
 use winit::dpi::{LogicalSize, PhysicalSize};
-use winit::event::{Event, WindowEvent};
+use winit::event::{Event, KeyEvent, WindowEvent};
 use winit::event_loop::EventLoop;
 use winit::keyboard::KeyCode;
+use winit::keyboard::KeyCode::*;
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
 use crate::graphics::grid::{Grid};
+use crate::system::emulator::{KeyBoardEvent, Keys};
+use crate::system::emulator::KeyBoardEvent::{Held, Pressed, Released};
 
-pub struct Display {
-    event_loop: EventLoop<()>,
-    input_helper: WinitInputHelper,
+const KEYS : [KeyCode; 16] = [
+    Digit1,
+    Digit2,
+    Digit3,
+    Digit4,
+    KeyQ,
+    KeyW,
+    KeyE,
+    KeyR,
+    KeyA,
+    KeyS,
+    KeyD,
+    KeyF,
+    KeyZ,
+    KeyX,
+    KeyC,
+    KeyV
+];
 
-}
-
-pub fn open( grid_lock : Arc<Mutex<Grid>>, display_width: usize, display_height: usize) -> Result<(), Error> {
+pub fn open( grid_lock : Arc<Mutex<Grid>>, display_width: usize, display_height: usize, keys : Arc<RwLock<Keys>>) -> Result<(), Error> {
     env_logger::init();
 
 
@@ -58,13 +76,10 @@ pub fn open( grid_lock : Arc<Mutex<Grid>>, display_width: usize, display_height:
 
         // Handle input events
         if input.update(&event) {
-
-            if input.key_pressed(KeyCode::KeyA) {
-                println!("Key A pressed");
-            } else if input.key_held(KeyCode::KeyA) {
-                println!("Key A held");
-            } else if input.key_released(KeyCode::KeyA) {
-                println!("Key A Released");
+            
+            // send key events
+            for (i,key) in KEYS.iter().enumerate() {
+                key_event_check(&input, key, keys.clone(), i);
             }
 
             // Close events
@@ -89,7 +104,15 @@ pub fn open( grid_lock : Arc<Mutex<Grid>>, display_width: usize, display_height:
     res.map_err(|e| Error::UserDefined(Box::new(e)))
 }
 
-
+fn key_event_check(input : &WinitInputHelper, key_code : &KeyCode, keys : Arc<RwLock<Keys>>, i: usize) {
+    if input.key_pressed(*key_code) {
+        let keys_unlock = &mut keys.write().unwrap();
+        keys_unlock[i] = true;
+    } else if input.key_released(*key_code) {
+        let keys_unlock = &mut keys.write().unwrap();
+        keys_unlock[i] = false;
+    }
+}
 
 fn log_error<E: std::error::Error + 'static>(method_name: &str, err: E) {
     error!("{method_name}() failed: {err}");

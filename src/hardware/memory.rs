@@ -1,6 +1,6 @@
 const FONTSET_SIZE: usize = 80;
 
-const FONTSET: [u8; FONTSET_SIZE] = [
+const FONT_SET: [u8; FONTSET_SIZE] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
     0x20, 0x60, 0x20, 0x20, 0x70, // 1
     0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
@@ -28,7 +28,7 @@ pub struct Memory {
 impl Memory {
     pub fn new() -> Memory {
         let mut memory = [0; u16::MAX as usize];
-        memory[..FONTSET_SIZE].copy_from_slice(&FONTSET);
+        memory[..FONTSET_SIZE].copy_from_slice(&FONT_SET);
         Memory { memory: [0; u16::MAX as usize], stack: Vec::new() }
     }
     

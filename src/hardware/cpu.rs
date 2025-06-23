@@ -1,8 +1,14 @@
+use std::ptr::eq;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
+use crossbeam_channel::{Receiver, TryRecvError};
+use winit::keyboard::KeyCode::KeyA;
+use winit::keyboard::NamedKey::Key11;
 use crate::graphics::grid::{Grid, GRID_X_BOXES, GRID_Y_BOXES};
 use crate::hardware::memory::Memory;
-use crate::system::emulator::Registers;
+use crate::system;
+use crate::system::emulator::{KeyBoardEvent, Keys, Registers};
 
 /// In the future this probably isn't necessary
 /// just checking out how lifetimes work.
@@ -10,16 +16,21 @@ pub struct Cpu<'a, 'b> {
     registers: &'a mut Registers,
     memory: &'b mut Memory,
     grid_lock: Arc<Mutex<Grid>>,
-    
+    keys_lock: Arc<RwLock<Keys>>,
+    tick_rate: Duration,
+    next_tick: Instant,
 }
 
 impl<'a, 'b> Cpu<'a, 'b> {
     pub fn new(registers : &'a mut Registers,
                        memory: &'b mut Memory,
-                       grid_lock: Arc<Mutex<Grid>>
+                       grid_lock: Arc<Mutex<Grid>>,
+                       keys_lock: Arc<RwLock<Keys>>,
     ) -> Cpu<'a, 'b> {
         registers.pc = 512;
-        Cpu {registers, memory, grid_lock}
+        let tick_rate = Duration::from_secs_f64(1.0 / 60.0);
+        let next_tick = Instant::now() + tick_rate;
+        Cpu {registers, memory, grid_lock, keys_lock, tick_rate, next_tick}
     }
     
     pub fn load_rom(&mut self, rom: &Vec<u8>) {
@@ -40,6 +51,21 @@ impl<'a, 'b> Cpu<'a, 'b> {
         (first_byte as u16) << 8 | second_byte as u16
     }
     
+    pub fn dec_timers(&mut self) {
+        while Instant::now() >= self.next_tick {
+            // decrement exactly one “tick” worth
+            if self.registers.delay > 0 {
+                self.registers.delay -= 1;
+            }
+            if self.registers.sound > 0 {
+                self.registers.sound -= 1;
+            }
+            
+            // schedule the *next* tick
+            self.next_tick += self.tick_rate;
+        }
+    }
+    
     fn decode_instruction(&mut self, instruction_data: u16) -> u8 {
         (instruction_data >> 12) as u8
     }
@@ -49,6 +75,7 @@ impl<'a, 'b> Cpu<'a, 'b> {
         let nib2 = (instruction & 0x0F00) >> 8;
         let nib3 = (instruction & 0x00F0) >> 4;
         let nib4 = instruction & 0x000F;
+            
         
         let op = self.decode_instruction(instruction);
         match (nib1, nib2, nib3, nib4) {
@@ -62,7 +89,6 @@ impl<'a, 'b> Cpu<'a, 'b> {
                             grid.draw_box(x, y, 0)
                         }
                     }
-                    println!("Screen Cleared");
                 }
             },
             (0,0,0xE,0xE) => {
@@ -73,20 +99,20 @@ impl<'a, 'b> Cpu<'a, 'b> {
             },
             (2,_,_,_) => {
                 let address = instruction & 0xFFF;
-                self.memory.stack.push(address);
+                self.memory.stack.push(self.registers.pc);
                 self.registers.pc = address;
             },
             (3,_,_,_) => {
                 let reg_i = nib2 as usize;
-                let value = instruction & 0xFF;
-                if self.registers.registers[reg_i] == value as u8 {
+                let value = (instruction & 0xFF) as u8;
+                if self.registers.registers[reg_i] == value {
                     self.registers.pc += 2;
                 }
             },
             (4,_,_,_) => {
                 let reg_i = nib2 as usize;
-                let value = instruction & 0xFF;
-                if self.registers.registers[reg_i] != value as u8 {
+                let value = (instruction & 0xFF) as u8;
+                if self.registers.registers[reg_i] != value {
                     self.registers.pc += 2;
                 }
             },
@@ -101,7 +127,7 @@ impl<'a, 'b> Cpu<'a, 'b> {
                 self.registers.registers[nib2 as usize] = (instruction & 0xFF) as u8;
             },
             (7,_,_,_) => {
-                self.registers.registers[nib2 as usize] += (instruction & 0xFF) as u8;
+                self.registers.registers[nib2 as usize] = self.registers.registers[nib2 as usize].wrapping_add((instruction & 0xFF) as u8);
             },
             (8,_,_,0) => {
                 self.registers.registers[nib2 as usize] = self.registers.registers[nib3 as usize]
@@ -116,19 +142,24 @@ impl<'a, 'b> Cpu<'a, 'b> {
                 self.registers.registers[nib2 as usize] ^= self.registers.registers[nib3 as usize]
             }
             (8,_,_,4) => {
-                let value = (self.registers.registers[nib2 as usize] as u16) + (self.registers.registers[nib3 as usize] as u16);
-                if value > 255 {
-                    self.registers.registers[nib2 as usize] = 255;
-                    self.registers.registers[0xF] = 1;
-                } else {
-                    self.registers.registers[nib2 as usize] = value as u8;
-                    self.registers.registers[0xF] = 0;
-                }
+                let x = nib2 as usize;
+                let y = nib3 as usize;
+
+                let (new_vx, carry) = self.registers.registers[x].overflowing_add(self.registers.registers[y]);
+                let new_vf = if carry { 1 } else { 0 };
+
+                self.registers.registers[x] = new_vx;
+                self.registers.registers[0xF] = new_vf;
             },
             (8,_,_,5) => {
-                let (value, overflow) = self.registers.registers[nib2 as usize].overflowing_sub(self.registers.registers[nib3 as usize]);
-                self.registers.registers[nib2 as usize] = value;
-                self.registers.registers[0xF] = if overflow { 0 } else { 1 };
+                let x = nib2 as usize;
+                let y = nib3 as usize;
+
+                let (new_vx, borrow) = self.registers.registers[x].overflowing_sub(self.registers.registers[y]);
+                let new_vf = if borrow { 0 } else { 1 };
+
+                self.registers.registers[x] = new_vx;
+                self.registers.registers[0xF] = new_vf;
             }
             (8, _, _, 6) => {
                 let x = nib2 as usize;
@@ -136,16 +167,21 @@ impl<'a, 'b> Cpu<'a, 'b> {
                 self.registers.registers[x] >>= 1;
                 self.registers.registers[0xF] = lsb;
             },
+            (8,_,_,7) => {
+                let x = nib2 as usize;
+                let y = nib3 as usize;
+
+                let (new_vx, borrow) = self.registers.registers[y].overflowing_sub(self.registers.registers[x]);
+                let new_vf = if borrow { 0 } else { 1 };
+
+                self.registers.registers[x] = new_vx;
+                self.registers.registers[0xF] = new_vf;
+            }
             (8, _, _,0xE) => {
                 let x = nib2 as usize;
-                let lsb = self.registers.registers[x] & 1;
+                let lsb = (self.registers.registers[x] >> 7) & 1;
                 self.registers.registers[x] <<= 1;
                 self.registers.registers[0xF] = lsb;
-            }
-            (8,_,_,7) => {
-                let (value, overflow) = self.registers.registers[nib3 as usize].overflowing_sub(self.registers.registers[nib2 as usize]);
-                self.registers.registers[nib2 as usize] = value;
-                self.registers.registers[0xF] = if overflow { 0 } else { 1 };
             }
             (9,_,_,_) => {
                 let reg_x = nib2 as usize;
@@ -198,7 +234,88 @@ impl<'a, 'b> Cpu<'a, 'b> {
                     self.registers.registers[0xF] = 0;
                 }
             }
-            _ => { println!("Unknown instruction opcode!!!! {:x}", op); }
+            (0xE,_,9,0xE) => {
+                let key = self.registers.registers[nib2 as usize] as usize;
+                let keys = self.keys_lock.read().unwrap(); 
+                if keys[key] {
+                    self.registers.pc += 2;
+                }
+                
+            }
+            (0xE,_,0xA,1) => {
+                let key = self.registers.registers[nib2 as usize] as usize;
+                let keys = self.keys_lock.read().unwrap();
+                if !keys[key] {
+                    self.registers.pc += 2;
+                }
+            }
+            (0xF,_,0,7) => {
+                self.registers.registers[nib2 as usize] = self.registers.delay;
+            }
+            (0xF,_,1,5) => {
+                self.registers.delay = self.registers.registers[nib2 as usize]
+            }
+            (0xF,_,1,8) => {
+                self.registers.sound = self.registers.registers[nib2 as usize]
+            }
+            (0xF,_,1,0xE) => {
+                self.registers.index += self.registers.registers[nib2 as usize] as u16
+            }
+            (0xF,_,0,0xA) => {
+                let x = nib2 as usize;
+                let mut pressed = false;
+
+                { // scoping the lock
+                    let keys = self.keys_lock.read().unwrap();
+                    for i in 0..keys.len() {
+                        if keys[i] {
+                            self.registers.registers[x] = i as u8;
+                            pressed = true;
+                            break;
+                        }
+                    }
+                }
+
+                if !pressed {
+                    self.registers.pc -= 2;
+                } else {
+                    let mut released = false;
+                    while !released {
+                        let keys = self.keys_lock.read().unwrap();
+                        if !keys[self.registers.registers[x] as usize] {
+                            released = true;
+                        }
+                    }
+                }
+                
+            }
+            (0xF,_,2,9) => {
+                self.registers.index = (self.registers.registers[nib2 as usize] * 5) as u16;
+            }
+            (0xF,_,3,3) => {
+                let vx = self.registers.registers[nib2 as usize];
+                let x = vx / 100; 
+                let y = (vx / 10) % 10;
+                let z = vx % 10;
+                self.memory.set(self.registers.index, x);
+                self.memory.set(self.registers.index + 1, y);
+                self.memory.set(self.registers.index + 2, z);
+            }
+            (0xF,_,5,5) => {
+                let x = nib2 as usize;
+                let i = self.registers.index as usize;
+                for idx in 0..=x {
+                    self.memory.set((i + idx) as u16, self.registers.registers[idx]);
+                }
+            }
+            (0xF,_,6,5) => {
+                let x = nib2 as usize;
+                let i = self.registers.index as usize;
+                for idx in 0..=x {
+                    self.registers.registers[idx] = self.memory.get((i + idx) as u16);
+                }
+            }
+            _ => { println!("Unknown instruction opcode!!!! {} {} {} {}", nib1, nib2, nib3, nib4 ); }
         }
     }
 }
